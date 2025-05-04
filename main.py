@@ -137,7 +137,19 @@ class ProcessManagerApp(tk.Tk):
             self._populate_tree()
 
     def _populate_tree(self):
-        """Refresh the process list and system RAM info, preserving selection and sorting by memory."""
+        """Refresh the process list and system RAM info, preserving selection, sort order, and scroll position."""
+        # --- Store current state ---
+        selected_pid = None
+        sel = self.tree.selection()
+        if sel:
+            try:
+                selected_pid = int(self.tree.set(sel[0], "pid"))
+            except ValueError:
+                pass
+
+        # Store current scroll position (top fraction)
+        scroll_pos = self.tree.yview()[0]
+
         # --- Update System RAM Info ---
         try:
             mem_info = psutil.virtual_memory()
@@ -153,19 +165,7 @@ class ProcessManagerApp(tk.Tk):
             self.available_ram_label.config(text="Available RAM: Error")
             self.total_ram_label.config(text="Total RAM: Error")
 
-        # --- Populate Process List (existing logic) ---
-        selected_pid = None
-        sel = self.tree.selection()
-        if sel:
-            try:
-                selected_pid = int(self.tree.set(sel[0], "pid"))
-            except ValueError:
-                pass
-
-        # Clear current items
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
+        # --- Incremental update of Treeview to preserve scroll and optimize performance ---
         # Gather process data first
         processes_data = []
         for proc in psutil.process_iter(attrs=["pid", "name", "memory_info"]):
@@ -173,45 +173,40 @@ class ProcessManagerApp(tk.Tk):
                 pid = proc.info["pid"]
                 name = proc.info["name"] or "?"
                 mem_info = proc.info["memory_info"]
-                rss_mb = 0.0 # Default to 0 if no info
-                if mem_info:
-                    rss_bytes = mem_info.rss
-                    rss_mb = rss_bytes / (1024 * 1024)
-
+                rss_mb = mem_info.rss / (1024 * 1024) if mem_info else 0.0
                 is_essential = self._is_essential(pid, name)
-                processes_data.append({
-                    "pid": pid,
-                    "name": name,
-                    "rss_mb": rss_mb,
-                    "is_essential": is_essential
-                })
+                processes_data.append((pid, name, rss_mb, is_essential))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
 
         # Sort by memory usage (descending)
-        processes_data.sort(key=lambda p: p["rss_mb"], reverse=True)
+        processes_data.sort(key=lambda x: x[2], reverse=True)
 
-        # Populate tree with sorted data
-        new_selection_id = None
-        for proc_data in processes_data:
-            pid = proc_data["pid"]
-            name = proc_data["name"]
-            rss_mb = proc_data["rss_mb"]
-            tag = "essential" if proc_data["is_essential"] else "nonessential"
+        # Map existing items by PID
+        existing = {int(self.tree.set(item, "pid")): item for item in self.tree.get_children()}
+        new_items = {}
 
-            item_id = self.tree.insert(
-                "",
-                "end",
-                values=(pid, name, f"{rss_mb:.1f}"),
-                tags=(tag,),
-            )
-            if pid == selected_pid:
-                new_selection_id = item_id # Store the new item ID
+        for index, (pid, name, rss_mb, is_essential) in enumerate(processes_data):
+            tag = "essential" if is_essential else "nonessential"
+            if pid in existing:
+                item_id = existing[pid]
+                # Update values and tag
+                self.tree.item(item_id, values=(pid, name, f"{rss_mb:.1f}"), tags=(tag,))
+            else:
+                # Insert new item at correct position
+                item_id = self.tree.insert("", index, values=(pid, name, f"{rss_mb:.1f}"), tags=(tag,))
+            # Reorder item to match sorted index
+            self.tree.move(item_id, "", index)
+            new_items[pid] = item_id
 
-        # Re-select the previously selected item if it still exists
-        if new_selection_id:
-            self.tree.selection_set(new_selection_id)
-            self.tree.see(new_selection_id) # Ensure it's visible
+        # Remove items no longer present
+        for pid, item_id in existing.items():
+            if pid not in new_items:
+                self.tree.delete(item_id)
+
+        # Restore selection
+        if selected_pid in new_items:
+            self.tree.selection_set(new_items[selected_pid])
 
     @staticmethod
     def _is_essential(pid: int, name: str) -> bool:
