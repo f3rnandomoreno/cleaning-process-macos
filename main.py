@@ -6,25 +6,35 @@ import os
 import threading
 import time
 
+# Toggle debug logging for process loading
+DEBUG = False  # Set to True to print process details to console
+
 # A basic (and non‑exhaustive) list of essential macOS processes that should not
 # be terminated.  You can expand this list to suit your workflow.
 ESSENTIAL_NAMES = {
-    "kernel_task",
-    "launchd",
-    "WindowServer",
-    "hidd",
-    "distnoted",
-    "powerd",
-    "loginwindow",
-    "systemstats",
-    "notifyd",
-    "syslogd",
-    "mdworker",
-    "mds",
-    "mds_stores",
-    "bluetoothd",
-    "configd",
+    "kernel_task",           # Kernel-level task manager; handles CPU scheduling and power models
+    "launchd",               # The master daemon (PID 1) that launches and supervises all system and user services
+    "WindowServer",          # Graphics service; draws windows and manages the macOS GUI
+    "hidd",                  # Human Interface Device Daemon; processes keyboard, mouse, and trackpad input
+    "distnoted",             # Distributed Notification Daemon; delivers system-wide notifications between processes
+    "powerd",                # Power management daemon; controls sleep, wake, and energy-saving modes
+    "loginwindow",           # Manages user login sessions and the login window interface
+    "systemstats",           # Collects hardware usage statistics for diagnostics and analytics
+    "notifyd",               # Notification Center daemon; drives the macOS notification system
+    "syslogd",               # Central system log daemon; records kernel and application logs
+    "mdworker",              # Spotlight helper; processes new files for indexing
+    "mds",                   # Spotlight Metadata Server; maintains the searchable metadata database
+    "mds_stores",            # Spotlight storage daemon; serves and stores Spotlight indexes
+    "bluetoothd",            # Bluetooth daemon; manages Bluetooth connections and devices
+    "configd",               # Configuration daemon; handles network settings, DNS, and dynamic preferences
+    "securityd",             # Security Server; implements cryptographic protocols, Keychain access, and code signing
+    "opendirectoryd",        # Directory service daemon; handles user authentication and directory lookups
+    "diskarbitrationd",      # Disk Arbitration daemon; mounts and unmounts storage volumes
+    "sandboxd",              # Sandbox daemon; enforces application sandboxing policies
+    "fseventsd",             # File System Events daemon; notifies the system of file and folder changes
+    "fontd",                 # Font daemon; manages loading and validation of system fonts
 }
+
 
 ESSENTIAL_PIDS = {0, 1}  # kernel_task (0) and launchd (1)
 
@@ -186,6 +196,11 @@ class ProcessManagerApp(tk.Tk):
 
         # Sort by memory usage (descending), unknown (-1) at bottom
         processes_data.sort(key=lambda x: x[2], reverse=True)
+        # Debug: print loaded process list
+        if DEBUG:
+            print(f"Debug: loaded {len(processes_data)} processes:")
+            for pid, name, rss_mb, rss_display, is_essential in processes_data:
+                print(f"  PID={pid}, Name={name}, RAM={rss_display} MB, Essential={is_essential}")
 
         # Map existing items by PID
         existing = {int(self.tree.set(item, "pid")): item for item in self.tree.get_children()}
