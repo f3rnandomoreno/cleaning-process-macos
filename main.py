@@ -173,28 +173,33 @@ class ProcessManagerApp(tk.Tk):
                 pid = proc.info["pid"]
                 name = proc.info["name"] or "?"
                 mem_info = proc.info["memory_info"]
-                rss_mb = mem_info.rss / (1024 * 1024) if mem_info else 0.0
+                if mem_info:
+                    rss_mb = mem_info.rss / (1024 * 1024)
+                    rss_display = f"{rss_mb:.1f}"
+                else:
+                    rss_mb = -1  # unknown, sorted to bottom
+                    rss_display = "-"
                 is_essential = self._is_essential(pid, name)
-                processes_data.append((pid, name, rss_mb, is_essential))
+                processes_data.append((pid, name, rss_mb, rss_display, is_essential))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
 
-        # Sort by memory usage (descending)
+        # Sort by memory usage (descending), unknown (-1) at bottom
         processes_data.sort(key=lambda x: x[2], reverse=True)
 
         # Map existing items by PID
         existing = {int(self.tree.set(item, "pid")): item for item in self.tree.get_children()}
         new_items = {}
 
-        for index, (pid, name, rss_mb, is_essential) in enumerate(processes_data):
+        for index, (pid, name, rss_mb, rss_display, is_essential) in enumerate(processes_data):
             tag = "essential" if is_essential else "nonessential"
             if pid in existing:
                 item_id = existing[pid]
                 # Update values and tag
-                self.tree.item(item_id, values=(pid, name, f"{rss_mb:.1f}"), tags=(tag,))
+                self.tree.item(item_id, values=(pid, name, rss_display), tags=(tag,))
             else:
                 # Insert new item at correct position
-                item_id = self.tree.insert("", index, values=(pid, name, f"{rss_mb:.1f}"), tags=(tag,))
+                item_id = self.tree.insert("", index, values=(pid, name, rss_display), tags=(tag,))
             # Reorder item to match sorted index
             self.tree.move(item_id, "", index)
             new_items[pid] = item_id
